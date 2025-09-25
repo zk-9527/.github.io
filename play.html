@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>直接播放器</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    #wrapper {
+      width: 70vw;
+      height: 37vh;
+      overflow: hidden;
+      position: relative;
+      background: black;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scale(1) translate(0%, -60%);
+      transform-origin: center center;
+    }
+
+    #clock {
+      position: absolute;
+      bottom: 60%;
+      left: 50%;
+      transform: translateX(-50%);
+      color: red;
+      font-size: 20px;
+      font-family: monospace;
+    }
+	
+	#clock .t2 {
+  color: lime;
+  font-size: 32px;   /* 放大 */
+  font-weight: bold;
+  margin-left: 8px;  /* 跟時間保持間距 */
+}
+
+/*
+    #t2count {
+      position: absolute;
+      top: 100px;
+      right: 480px;
+      color: lime;
+      font-size: 28px;
+      font-family: monospace;
+      background: rgba(0,0,0,0.5);
+      padding: 2px 10px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+	*/
+  </style>
+</head>
+<body>
+  <div id="wrapper">
+    <video id="video" autoplay muted playsinline></video>
+    <div id="clock"></div>
+    <div id="t2count">--</div>
+  </div>
+
+  <script>
+    // 播放 HLS
+    var video = document.getElementById('video');
+    var streamUrl = "http://airport-dvr.mobile.com.tw:81/hls/mystream4.m3u8 ";
+
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = streamUrl;
+    } else if (Hls.isSupported()) {
+      var hls = new Hls();
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+    }
+
+let latestT2 = "--";
+
+setInterval(() => {
+  const now = new Date();
+  const days = ["7","1","2","3","4","5","6"];
+  const dateStr = now.getFullYear() + "_" +
+                  String(now.getMonth()+1).padStart(2,"0") + "_" +
+                  String(now.getDate()).padStart(2,"0") + "_" +
+                  days[now.getDay()] + " " +
+                  now.toLocaleTimeString("zh-TW", { hour12:false });
+
+  // 判斷 T2 顏色
+  let t2Color = "white";
+  if (!isNaN(latestT2)) {
+    const t2 = Number(latestT2);
+    if (t2 === 0) t2Color = "red";
+    else if (t2 < 10) t2Color = "yellow";
+    else if (t2 > 40) t2Color = "lime";
+    //else t2Color = "white"; // 介於 10~40 時白色
+  }
+
+  document.getElementById("clock").innerHTML =
+    `${dateStr} <span class="t2" style="color:${t2Color}">${latestT2}</span>`;
+}, 1000);
+
+// 更新 T2
+async function updateCounts() {
+  try {
+    const resp = await fetch("http://taxitransfer.duckdns.org/ios/gett1t2.html");
+    const buf = await resp.arrayBuffer();
+    const text = new TextDecoder("big5").decode(buf);
+
+    const tdMatches = [...text.matchAll(/<td[^>]*>(.*?)<\/td>/g)].map(m => m[1]);
+    const getLastNumber = (str) => {
+      const nums = str.match(/\d+/g);
+      return nums ? nums[nums.length - 1] : "--";
+    };
+
+    latestT2 = tdMatches[3] ? getLastNumber(tdMatches[3]) : "--";
+  } catch (e) {
+    latestT2 = "--";
+    console.error("讀取失敗:", e);
+  }
+}
+
+setInterval(updateCounts, 10000);
+updateCounts();
+
+
+  </script>
+</body>
+</html>
